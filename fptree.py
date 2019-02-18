@@ -2,7 +2,7 @@ import csv
 import numpy as np
 from itertools import chain
 from itertools import combinations
-
+valid_l=[]
 def main():
 	f_no=input('\nChoose the data file\n1. test_dataset_1.csv \n2. retail_dataset.csv \n')
 	transactions=read_file(f_no)
@@ -32,22 +32,45 @@ def fp_tree_mining(fp_tree,support_table,min_confidence,min_support):
 	print(item_list)
 
 	for i in range(len(item_list)):
+		print(item_list[i])
 		temp=mining_items()
 		temp.value=item_list[i] 
 		mining_table.append(temp)
-		mining_table[i].conditional_pattern_base=get_paths(fp_tree,temp.value,[],-1)
-		print(mining_table[i].conditional_pattern_base)
-		#mining_table[i].conditional_fp_tree=create_conditional_fp_tree(mining_table[i].conditional_pattern_base,min_support)
+		del valid_l[:]
+		get_paths(fp_tree,temp.value,[],-1)
+		#print(valid_l)
+		mining_table[i].conditional_pattern_base=valid_l
+		#print(mining_table[i].conditional_pattern_base)
+		mining_table[i].conditional_fp_tree=create_conditional_fp_tree(mining_table[i].conditional_pattern_base,min_support)
+		print(mining_table[i].conditional_fp_tree)
+
+		mining_table[i].frequent_patterns=generate_patterns(mining_table[i].conditional_fp_tree,item_list[i])
+		print(mining_table[i].frequent_patterns)
+
+		
 
 def create_conditional_fp_tree(conditional_pattern_base,min_support):
 
-	items=get_items(conditional_pattern_base)
-	tree,table=generate_fp_tree(items,conditional_pattern_base,min_support)
+	items=get_mining_items(conditional_pattern_base)
+	#print(items)
+	tree,table=generate_mining_fp_tree(items,conditional_pattern_base,min_support)
 	branches=get_branches(tree,[],-1)
+
+	return branches
+
+def generate_patterns(branches,item_value):
+
+	patterns=[]
+	for i in range(len(branches)):
+		for j in range(2,len(branches)+2):
+			patterns+=list(combinations(branches[i]+[item_value],j))
+
+	return patterns
 
 def get_branches(head,l,index):
 
 	if head.value!=None:
+		l[index].append(head.value)
 		for i in range(len(head.children)):
 			l=get_branches(head.children[i],l,index)
 	else:
@@ -55,23 +78,39 @@ def get_branches(head,l,index):
 			l.append([])
 			index=len(l)-1
 			l=get_branches(head.children[i],l,index)
+	return l
 
 def get_paths(head,value,l,index):
 	
+	#print(valid_l,l,head.value,value)
+
 	if head.value==value:
-		return l 
+		temp=[]
+		for i in range(len(l[index])):
+			temp.append(l[index][i])
+		temp.append(head.count)
+		valid_l.append(temp)
+		l[index]=None
+		return l
 	if head.value!=None and head.value!=value and len(head.children)!=0:
 		l[index].append(head.value)
 
-	'''if len(head.children)==0:
+	if len(head.children)==0:
 		l[index]=None
-		return l'''
+		return l
 
+	if head.value!=None:
+		copy=[]
+		for i in range(len(l[index])):
+			copy.append(l[index][i])
+	
 	for i in range(len(head.children)):
-		if index!=-1 and l[index]!=None:
-			#l.append([])
-			#index=len(l)-1
-			l=get_paths(head.children[i],value,l,index)
+		if head.value!=None:
+			if i>0:
+				l.append(copy)
+				index=len(l)-1
+			
+			l =get_paths(head.children[i],value,l,index)
 		else:
 			l.append([])
 			index=len(l)-1
@@ -93,6 +132,14 @@ def get_internals(head,l):
 def generate_fp_tree(items,transactions,min_support):
 
 	support_table=get_support_count(items,transactions,min_support)
+	new_transactions=get_new_transactions(transactions,support_table)
+	fp_tree=construct_fp_tree(support_table,new_transactions)
+
+	return fp_tree,support_table
+
+def generate_mining_fp_tree(items,transactions,min_support):
+
+	support_table=get_mining_support_count(items,transactions,min_support)
 	new_transactions=get_new_transactions(transactions,support_table)
 	fp_tree=construct_fp_tree(support_table,new_transactions)
 
@@ -136,6 +183,26 @@ def get_new_transactions(transactions,support_table):
 
 	return new_transactions
 
+def get_mining_support_count(items,transactions,min_support):
+
+	no_items=len(items)
+	count=[0 for i in range(no_items)]
+
+	for i in range(len(transactions)):
+		for j in range(len(transactions[i])-1):
+			index=items.index(transactions[i][j])
+			count[index]+=transactions[i][-1]
+
+	table=[]
+	for i in range(no_items):
+		if count[i]>=min_support:
+			l=[]
+			l.append(items[i])
+			l.append(count[i])
+			table.append(l)
+	table=sorted(table,key=lambda l:l[1], reverse=True)
+	return table
+
 def get_support_count(items,transactions,min_support):
 
 	no_items=len(items)
@@ -163,6 +230,12 @@ def get_items(dataset):
 
 	#returning distinct items from 1d list
 	return sorted(list(set(data)))
+
+def get_mining_items(dataset):
+	l=[]
+	for i in range(len(dataset)):
+		l+=dataset[i][:len(dataset[i])-1]
+	return sorted(list(set(l)))
 
 def read_file(f_no):
 
